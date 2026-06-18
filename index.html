@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>心理帳戶計算機</title>
+<meta name="description" content="心理帳戶計算機，七大帳戶分配與每月消費明細。" />
+<link rel="manifest" href="manifest.webmanifest" />
+<meta name="theme-color" content="#e7e1d6" />
+<link rel="icon" type="image/svg+xml" href="icons/icon.svg" />
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
+<link rel="apple-touch-icon" href="icons/icon-180.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="計算機" />
+<meta name="mobile-web-app-capable" content="yes" />
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --desk:#e7e1d6;--paper:#fbf8f1;--paper-soft:#f4efe4;
+  --ink:#2b2620;--ink-soft:#7c7361;--ink-faint:#a89e89;
+  --dash:#cfc6b2;--line:#e6ddca;
+  --acc:#2f6a4f;        /* 印章 / 強調色：深綠 */
+  --acc-soft:#5d8a78;
+  --warn:#a8651e;       /* 超支：深琥珀(更收斂) */
+  --mono:"SFMono-Regular",Menlo,Consolas,"Courier New",monospace;
+  --sh:0 14px 36px rgba(60,48,28,.2);
+  --t:.25s cubic-bezier(.4,.1,.2,1);
+  /* 六色（極淡，僅用於 4px 比例條） */
+  --c-living:#3a352c;--c-invest:#4a4337;--c-edu:#665d4f;--c-fun:#857b69;--c-give:#a59a83;--c-saving:#bdb29c;
+}
+html{-webkit-text-size-adjust:100%}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei","Segoe UI",system-ui,sans-serif;
+  background:var(--desk);color:var(--ink);line-height:1.55;min-height:100svh;min-height:100dvh;
+  display:flex;justify-content:center;align-items:flex-start;
+  padding:calc(1.4rem + env(safe-area-inset-top)) calc(.8rem + env(safe-area-inset-right))
+    calc(2.4rem + env(safe-area-inset-bottom)) calc(.8rem + env(safe-area-inset-left));
+  -webkit-tap-highlight-color:transparent;
+}
+.mono{font-family:var(--mono)}
+.ic{width:1em;height:1em;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vertical-align:-.125em;flex:none}
+.icon-defs{position:absolute;width:0;height:0;overflow:hidden}
+
+.wrap{width:100%;max-width:430px;display:flex;flex-direction:column;gap:.95rem}
+
+/* tabs */
+.tabs{display:flex;gap:0;justify-content:center;background:var(--paper);border:1px solid var(--line);align-self:center;box-shadow:0 2px 6px rgba(60,48,28,.1)}
+.tab{font-family:var(--mono);font-size:.78rem;font-weight:800;letter-spacing:.2em;color:var(--ink-soft);
+  background:transparent;border:none;padding:.6rem 1.2rem;cursor:pointer;transition:var(--t)}
+.tab.active{color:var(--paper);background:var(--ink)}
+.tab:not(.active):hover{color:var(--ink)}
+
+/* receipt paper（撕邊使用 mask 鋸齒） */
+.receipt{position:relative;background:var(--paper);box-shadow:var(--sh);padding:1.6rem 1.5rem 1.7rem;
+  --tear:12px;
+  -webkit-mask:
+    linear-gradient(135deg,transparent 6px,#000 6px) top left/12px 12px repeat-x,
+    linear-gradient(225deg,transparent 6px,#000 6px) top right/12px 12px repeat-x,
+    linear-gradient(45deg,transparent 6px,#000 6px) bottom left/12px 12px repeat-x,
+    linear-gradient(-45deg,transparent 6px,#000 6px) bottom right/12px 12px repeat-x,
+    linear-gradient(#000,#000);
+  -webkit-mask-composite:source-over;
+          mask:
+    linear-gradient(135deg,transparent 6px,#000 6px) top left/12px 12px repeat-x,
+    linear-gradient(225deg,transparent 6px,#000 6px) top right/12px 12px repeat-x,
+    linear-gradient(45deg,transparent 6px,#000 6px) bottom left/12px 12px repeat-x,
+    linear-gradient(-45deg,transparent 6px,#000 6px) bottom right/12px 12px repeat-x,
+    linear-gradient(#000,#000);
+}
+.receipt::before{content:"";position:absolute;top:8px;left:8px;right:8px;bottom:8px;
+  pointer-events:none;border-radius:1px;
+  background:radial-gradient(ellipse at top,rgba(0,0,0,0) 70%,rgba(60,48,28,.04) 100%)}
+
+.r-head{text-align:center;border-bottom:2px dashed var(--dash);padding-bottom:.85rem;margin-bottom:1rem}
+.r-title{font-size:1.15rem;font-weight:800;letter-spacing:.3em;color:var(--ink)}
+.r-sub{font-size:.7rem;color:var(--ink-faint);margin-top:.3rem;font-family:var(--mono);letter-spacing:.15em}
+.r-sub b{color:var(--ink-soft);font-weight:700}
+
+/* income row */
+.income-row{display:flex;align-items:baseline;gap:.5rem}
+.income-row .lbl{font-size:.92rem;font-weight:700;letter-spacing:.05em}
+.income-row .dotleader{flex:1;height:1px;border-bottom:1px dotted var(--ink-faint);transform:translateY(-4px);margin:0 .3rem}
+.income-field{display:flex;align-items:baseline;gap:.25rem;border-bottom:1.5px solid var(--ink);padding-bottom:1px;transition:border-color var(--t)}
+.income-field:focus-within{border-color:var(--acc)}
+.income-field .cur{font-family:var(--mono);font-size:.92rem;font-weight:800;color:var(--ink-faint)}
+#income-input{width:120px;border:none;outline:none;background:transparent;text-align:right;
+  font-family:var(--mono);font-size:1.42rem;font-weight:800;color:var(--ink);padding:0}
+#income-input::placeholder{color:#cdc4b0}
+#income-input::-webkit-outer-spin-button,#income-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+#income-input[type=number]{-moz-appearance:textfield}
+
+/* 4px alloc bar */
+.alloc-bar{display:flex;height:4px;border:1px solid var(--dash);margin:.85rem 0 1.15rem}
+.alloc-seg{height:100%;transition:width .4s cubic-bezier(.34,1.4,.64,1)}
+
+/* table header */
+.thead{display:flex;align-items:baseline;font-family:var(--mono);font-size:.7rem;color:var(--ink-soft);
+  letter-spacing:.2em;border-bottom:1px solid var(--dash);padding-bottom:.35rem;margin-bottom:.35rem}
+.thead .c-no{width:24px}.thead .c-name{flex:1}.thead .c-pct{width:48px;text-align:right}.thead .c-amt{width:88px;text-align:right}
+
+/* item rows */
+.row{padding-top:.45rem}
+.row .top{display:flex;align-items:baseline;font-family:var(--mono);font-size:.95rem;color:var(--ink);gap:8px}
+.row .no{width:24px;color:var(--ink-faint)}
+.row .dot{width:8px;height:8px;border-radius:50%;flex:none;display:inline-block;align-self:center;box-shadow:0 0 0 1px rgba(43,38,32,.12)}
+.lb-head .name .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:.45rem;vertical-align:.05em;box-shadow:0 0 0 1px rgba(43,38,32,.12)}
+.row .name{flex:1;font-family:inherit;font-weight:700;display:flex;align-items:center;gap:.4rem;min-width:0;letter-spacing:.04em}
+.row .pct{width:48px;text-align:right;color:var(--ink-soft);font-weight:700}
+.row .amt{width:88px;text-align:right;font-weight:800}
+.burn-tag{font-family:var(--mono);font-size:.55rem;font-weight:800;letter-spacing:.15em;color:var(--paper);background:var(--ink);padding:1px 6px}
+.row .ctl{display:flex;align-items:center;gap:.55rem;margin-top:.35rem}
+.pct-slider{-webkit-appearance:none;appearance:none;flex:1;height:2px;background:var(--ink);opacity:.25;cursor:pointer;outline:none;border-radius:0;
+  background-image:linear-gradient(var(--ink),var(--ink));background-size:var(--slider-fill,50%) 100%;background-repeat:no-repeat;opacity:1}
+.pct-slider::-webkit-slider-runnable-track{height:2px;background:rgba(43,38,32,.22)}
+.pct-slider::-moz-range-track{height:2px;background:rgba(43,38,32,.22)}
+.pct-slider::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--paper);border:1.5px solid var(--ink);margin-top:-6px;cursor:pointer;transition:transform .15s}
+.pct-slider::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--paper);border:1.5px solid var(--ink);cursor:pointer}
+.pct-slider:hover::-webkit-slider-thumb{transform:scale(1.2)}
+.pct-slider:active::-webkit-slider-thumb{background:var(--ink)}
+.pct-slider:focus-visible{outline:1px solid var(--acc);outline-offset:2px}
+.pct-input{width:42px;background:var(--paper);border:1px solid var(--dash);border-radius:0;
+  color:var(--ink);font-family:var(--mono);font-size:.78rem;font-weight:700;text-align:center;padding:3px 1px;outline:none;-moz-appearance:textfield}
+.pct-input::-webkit-outer-spin-button,.pct-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.pct-input:focus{border-color:var(--ink)}
+.row .goal{font-family:var(--mono);font-size:.62rem;color:var(--ink-faint);letter-spacing:.1em;margin-top:.15rem;text-align:right}
+.row .goal.miss{color:var(--warn)}
+.row .goal.ok{color:var(--acc)}
+
+/* divider & totals */
+.divider{border-top:2px dashed var(--dash);margin:1.1rem 0}
+.total-line{display:flex;justify-content:space-between;align-items:baseline}
+.total-line .lbl{font-size:1rem;font-weight:800;letter-spacing:.4em}
+.total-line .val{font-family:var(--mono);font-size:1.08rem;font-weight:800;display:flex;align-items:baseline;gap:.55rem}
+.pct-badge{font-family:var(--mono);font-size:.7rem;font-weight:800;letter-spacing:.1em;padding:2px 8px;color:var(--ink);border:1px solid var(--ink)}
+.pct-badge.over{color:var(--warn);border-color:var(--warn)}
+.pct-badge.under{color:var(--ink-soft);border-color:var(--dash)}
+
+/* save block：印章 + SAVE */
+.save-block{display:flex;justify-content:space-between;align-items:center;gap:.7rem;margin-top:1rem}
+.stamp{flex:none;transform:rotate(-7deg);transition:transform .3s,opacity .3s}
+.stamp.hidden{opacity:0;transform:rotate(-7deg) scale(.6)}
+.month-save{display:flex;flex-direction:column;gap:.5rem;flex:1;align-items:flex-end}
+#month-input{background:var(--paper-soft);border:1px solid var(--dash);border-radius:0;color:var(--ink);
+  font-family:var(--mono);font-size:.85rem;font-weight:700;padding:.45rem .55rem;outline:none;color-scheme:light;width:100%;max-width:170px}
+#month-input:focus{border-color:var(--ink)}
+.btn-primary{font-family:var(--mono);font-size:.86rem;font-weight:800;letter-spacing:.3em;
+  background:var(--ink);color:var(--paper);border:none;padding:.7rem 1.2rem;cursor:pointer;transition:var(--t);width:100%;max-width:170px}
+.btn-primary:hover{background:#1c1813}
+.btn-primary:active{transform:scale(.98)}
+
+.barcode{text-align:center;margin-top:1.2rem}
+.barcode .bars{font-family:var(--mono);font-size:1.35rem;letter-spacing:-1px;color:var(--ink);line-height:1;word-break:break-all}
+.barcode .cap{font-family:var(--mono);font-size:.62rem;color:var(--ink-faint);letter-spacing:.3em;margin-top:.35rem}
+
+.reset-wrap{display:flex;justify-content:center;margin-top:.15rem}
+.btn-reset{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:.76rem;font-weight:700;letter-spacing:.2em;
+  color:var(--ink-soft);background:transparent;border:1px solid var(--line);padding:.55rem 1.3rem;border-radius:99px;cursor:pointer;transition:var(--t)}
+.btn-reset:hover{color:var(--ink);border-color:var(--ink-soft)}
+
+.view{display:none}.view.active{display:block}
+
+/* ── 記帳明細 ── */
+.records-head{display:flex;gap:.6rem;align-items:center;margin-bottom:.85rem}
+.records-head label{font-family:var(--mono);font-size:.72rem;font-weight:700;color:var(--ink-soft);letter-spacing:.15em}
+#month-select{flex:1;background:var(--paper-soft);border:1px solid var(--dash);border-radius:0;color:var(--ink);
+  font-family:var(--mono);font-size:.88rem;font-weight:700;padding:.5rem .6rem;outline:none;color-scheme:light}
+.btn-danger{font-family:var(--mono);font-size:.7rem;font-weight:800;letter-spacing:.2em;color:var(--warn);
+  background:transparent;border:1px solid var(--warn);padding:.5rem .85rem;cursor:pointer;transition:var(--t);white-space:nowrap}
+.btn-danger:hover{background:#f5e8d8}
+.summary{display:flex;justify-content:space-between;text-align:center;border-top:2px dashed var(--dash);border-bottom:2px dashed var(--dash);padding:.85rem 0;margin-bottom:.9rem;gap:.4rem}
+.summary .cell{flex:1;min-width:0}
+.summary .lbl{font-family:var(--mono);font-size:.65rem;color:var(--ink-soft);letter-spacing:.15em}
+.summary .val{font-family:var(--mono);font-size:clamp(.92rem,3.6vw,1.1rem);font-weight:800;margin-top:.15rem;white-space:nowrap;color:var(--ink)}
+.summary .cell.spent .val{color:var(--warn)}
+.summary .cell.remain .val{color:var(--acc)}
+.summary .cell.remain.neg .val{color:var(--warn)}
+
+.ledger-block{padding:.55rem 0 .9rem;border-bottom:2px dashed var(--dash)}
+.ledger-block:last-of-type{border-bottom:none}
+.lb-head{display:flex;align-items:baseline;gap:.5rem;font-family:var(--mono);font-size:.78rem;color:var(--ink);letter-spacing:.1em}
+.lb-head .name{font-family:inherit;font-weight:800;letter-spacing:.06em}
+.lb-head .dotleader{flex:1;border-bottom:1px dotted var(--ink-faint);transform:translateY(-4px)}
+.lb-head .budget{color:var(--ink-soft);font-weight:700}
+.note-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:.45rem}
+.note-tag{display:inline-flex;align-items:center;gap:3px;font-family:-apple-system,"PingFang TC","Noto Sans TC",sans-serif;font-size:.72rem;font-weight:600;color:var(--ink-soft);
+  background:var(--paper-soft);border:1px solid var(--dash);border-radius:99px;padding:3px 9px;cursor:pointer;transition:var(--t);white-space:nowrap}
+.note-tag:hover{color:var(--ink);border-color:var(--ink-soft);background:#fff}
+.note-tag.custom{border-style:dashed}
+.note-del{flex:none;width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;margin-left:2px;
+  background:transparent;border:none;color:var(--ink-faint);font-size:.85rem;line-height:1;cursor:pointer;padding:0;border-radius:50%}
+.note-del:hover{color:var(--warn);background:#fbe7e2}
+.note-add{font-family:var(--mono);font-size:.7rem;font-weight:700;letter-spacing:.05em;color:var(--ink-soft);
+  background:transparent;border:1px dashed var(--dash);border-radius:99px;padding:3px 9px;cursor:pointer;transition:var(--t)}
+.note-add:hover{color:var(--ink);border-color:var(--ink-soft);border-style:solid}
+.expense-list{list-style:none;display:flex;flex-direction:column;margin-top:.45rem;margin-bottom:.45rem}
+.expense-row{display:flex;gap:.6rem;align-items:baseline;font-family:var(--mono);font-size:.82rem;color:var(--ink);padding:.2rem 0}
+.expense-row .ed{color:var(--ink-faint);width:46px;flex:none}
+.expense-row .en{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:-apple-system,"PingFang TC","Noto Sans TC",sans-serif;letter-spacing:.02em}
+.expense-row .ea{width:80px;text-align:right;font-weight:700}
+.expense-row .del{flex:none;width:20px;height:20px;display:flex;align-items:center;justify-content:center;border:none;background:transparent;color:var(--ink-faint);font-size:1rem;border-radius:0;cursor:pointer;line-height:1;transition:var(--t)}
+.expense-row .del:hover{color:var(--warn)}
+.expense-empty{font-family:var(--mono);font-size:.74rem;color:var(--ink-faint);text-align:center;padding:.3rem 0;letter-spacing:.1em}
+.subtotal{display:flex;font-family:var(--mono);font-size:.82rem;font-weight:800;justify-content:flex-end;gap:.6rem;border-top:1px dotted var(--ink-faint);padding-top:.35rem}
+.subtotal .lbl{color:var(--ink-soft);letter-spacing:.2em}
+.subtotal .val{width:80px;text-align:right;color:var(--ink)}
+.subtotal.remain .val{color:var(--acc)}
+.subtotal.remain.neg .val{color:var(--warn)}
+.expense-form{display:flex;gap:5px;margin-top:.4rem}
+.expense-form input{background:var(--paper-soft);border:1px solid var(--dash);border-radius:0;color:var(--ink);
+  font-family:var(--mono);font-size:16px;padding:7px 9px;outline:none;min-width:0}
+.expense-form .exp-name{flex:1;font-family:-apple-system,"PingFang TC","Noto Sans TC",sans-serif}
+.expense-form .exp-amt{width:88px;-moz-appearance:textfield;text-align:right}
+.expense-form .exp-amt::-webkit-outer-spin-button,.expense-form .exp-amt::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.expense-form input:focus{border-color:var(--ink)}
+.expense-form .exp-add{flex:none;width:36px;border:none;background:var(--ink);color:var(--paper);font-size:1.1rem;font-weight:700;cursor:pointer;transition:var(--t)}
+.expense-form .exp-add:hover{background:#1c1813}
+
+.empty-state{text-align:center;padding:2.5rem 1rem;color:var(--ink-soft)}
+.empty-state .es-ic{font-size:2.2rem;color:var(--ink-faint)}
+.empty-state p{font-size:.9rem;line-height:1.7;margin:.85rem 0 1.3rem;font-family:-apple-system,"PingFang TC","Noto Sans TC",sans-serif}
+
+.foot{text-align:center;font-family:var(--mono);font-size:.66rem;color:var(--ink-faint);letter-spacing:.2em;padding-top:.2rem}
+.install-btn{display:none;align-items:center;gap:6px;margin:0 auto;font-family:var(--mono);font-size:.72rem;font-weight:700;letter-spacing:.15em;color:var(--ink-soft);background:var(--paper);border:1px solid var(--line);padding:.45rem .9rem;cursor:pointer}
+.install-btn.show{display:inline-flex}
+.install-tip{display:none;font-size:.78rem;color:var(--ink-soft);background:var(--paper);border:1px solid var(--line);padding:.7rem .9rem;text-align:center;line-height:1.65;font-family:-apple-system,"PingFang TC","Noto Sans TC",sans-serif}
+.install-tip.show{display:block}
+.install-tip b{color:var(--ink)}
+
+.toast{position:fixed;left:50%;bottom:calc(1.4rem + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);
+  background:var(--ink);color:var(--paper);font-family:var(--mono);font-size:.82rem;font-weight:700;letter-spacing:.1em;
+  padding:.7rem 1.2rem;box-shadow:var(--sh);opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:50;max-width:90vw;text-align:center}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+@keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.08)}100%{transform:scale(1)}}
+.pop{animation:pop .3s ease}
+
+@media (max-width:380px){
+  .receipt{padding:1.4rem 1.2rem 1.55rem}
+  #income-input{font-size:1.3rem;width:104px}
+  .r-title{letter-spacing:.22em;font-size:1.08rem}
+  .row .amt{width:78px}.thead .c-amt{width:78px}
+}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms!important;transition-duration:.001ms!important}}
+</style>
+</head>
+<body>
+
+<svg class="icon-defs" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M5 3.5h14v17l-2.3-1.4-2.3 1.4-2.4-1.4-2.4 1.4-2.3-1.4L5 20.5z"/><line x1="8.5" y1="8" x2="15.5" y2="8"/><line x1="8.5" y1="11.5" x2="15.5" y2="11.5"/><line x1="8.5" y1="15" x2="13" y2="15"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><line x1="4" y1="6.5" x2="20" y2="6.5"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17.5" x2="20" y2="17.5"/></symbol>
+</svg>
+
+<div class="wrap">
+
+  <div class="tabs" role="tablist">
+    <button class="tab active" id="tab-calc" role="tab">分配單</button>
+    <button class="tab" id="tab-records" role="tab">消費明細</button>
+  </div>
+
+  <!-- ══ 分配單 ══ -->
+  <section class="view active" id="view-calc">
+    <article class="receipt">
+      <header class="r-head">
+        <div class="r-title">心理帳戶計算機</div>
+        <div class="r-sub">NO. <b id="receipt-no">2026-06</b>　·　七大心理帳戶</div>
+      </header>
+
+      <div class="income-row">
+        <span class="lbl">每月收入</span>
+        <span class="dotleader"></span>
+        <span class="income-field"><span class="cur">NT$</span>
+          <input type="number" id="income-input" inputmode="numeric" placeholder="60,000" min="0" step="1" autocomplete="off" /></span>
+      </div>
+      <div class="alloc-bar" id="alloc-bar" aria-hidden="true"></div>
+
+      <div class="thead">
+        <span class="c-no">#</span><span class="c-name">ITEM</span><span class="c-pct">%</span><span class="c-amt">AMOUNT</span>
+      </div>
+      <div id="rows"></div>
+
+      <div class="divider"></div>
+      <div class="total-line">
+        <span class="lbl">合計</span>
+        <span class="val"><span id="total-display">NT$ 0</span><span class="pct-badge" id="total-pct-badge">100%</span></span>
+      </div>
+
+      <div class="save-block">
+        <div class="stamp hidden" id="stamp" aria-hidden="true">
+          <svg width="92" height="92" viewBox="0 0 92 92">
+            <rect x="4" y="4" width="84" height="84" fill="none" stroke="var(--acc)" stroke-width="2.5"/>
+            <rect x="9" y="9" width="74" height="74" fill="none" stroke="var(--acc)" stroke-width="1"/>
+            <text x="46" y="38" text-anchor="middle" fill="var(--acc)" font-size="14" font-weight="800" font-family="-apple-system,'PingFang TC',sans-serif" letter-spacing="3">已分配</text>
+            <text x="46" y="58" text-anchor="middle" fill="var(--acc)" font-size="9" font-weight="700" font-family="var(--mono)" letter-spacing="2">ALLOCATED</text>
+            <text x="46" y="72" text-anchor="middle" fill="var(--acc)" font-size="8" font-family="var(--mono)" letter-spacing="1" id="stamp-date">·</text>
+          </svg>
+        </div>
+        <div class="month-save">
+          <input type="month" id="month-input" />
+          <button class="btn-primary" id="btn-save">[ SAVE ]</button>
+        </div>
+      </div>
+
+      <div class="barcode">
+        <div class="bars">|‖|‖||‖|‖‖||‖|‖||‖|‖‖|‖||‖|‖|</div>
+        <div class="cap">THANK YOU · 100% ALLOCATED</div>
+      </div>
+    </article>
+
+    <div class="reset-wrap"><button class="btn-reset" id="btn-reset">重設比例</button></div>
+  </section>
+
+  <!-- ══ 消費明細 ══ -->
+  <section class="view" id="view-records"></section>
+
+  <button class="install-btn" id="install-btn">[ INSTALL APP ]</button>
+  <p class="install-tip" id="install-tip"></p>
+  <footer class="foot">心理帳戶 · 資料儲存於本機 · 可離線使用</footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const ACCOUNTS=[
+  { key:'living',  name:'生活',     percent:40, hex:'#5a7a9e', goal:{type:'max',v:30,text:'TARGET ≤ 30%'},
+    notes:['🍔 食','👕 衣','🏠 住','🚗 行'] },
+  { key:'startup', name:'創業',     percent:10, hex:'#9c8a4a',
+    notes:['🧾 會計','📋 公司登記','💻 軟體','🛠 工具'] },
+  { key:'invest',  name:'投資',     percent:10, hex:'#5e9078', goal:{type:'min',v:30,text:'TARGET ≥ 30%'},
+    notes:['🎁 獎金','🍀 意外之財','🧧 中獎發票'] },
+  { key:'edu',     name:'教育',     percent:10, hex:'#a48254',
+    notes:['▶️ 線上課程','✏️ 文具','💻 3C 設備','🏃 運動'] },
+  { key:'fun',     name:'玩樂',     percent:10, hex:'#b87593', burn:true,
+    notes:['🖼 展覽','🍱 吃喝玩樂','🎬 電影','📺 Netflix'] },
+  { key:'give',    name:'給予',     percent:10, hex:'#8478a8', burn:true,
+    notes:['❤️ 孝親費','🧧 紅包','🎀 禮物','🤝 公益'] },
+  { key:'saving',  name:'長期儲蓄', percent:10, hex:'#6a9aa0',
+    notes:['✈️ 出國旅遊','🛍 想要的東西'], custom:true },
+];
+const KEYS=ACCOUNTS.map(a=>a.key);
+const percents={}; ACCOUNTS.forEach(a=>percents[a.key]=a.percent);
+
+const $=id=>document.getElementById(id);
+const incomeInput=$('income-input');
+const fmt=v=>'NT$ '+Math.floor(Math.max(0,v)).toLocaleString('zh-TW');
+const fmtNoCur=v=>Math.floor(Math.max(0,v)).toLocaleString('zh-TW');
+const fmtSigned=v=>(v<0?'-':'')+'NT$ '+Math.abs(Math.round(v)).toLocaleString('zh-TW');
+const pop=el=>{ if(!el)return; el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); };
+const currentIncome=()=>Math.max(0,parseFloat(incomeInput.value)||0);
+
+/* 再平衡：
+   • 動「投資」以外的任一帳戶 → 差額由投資吸收，其餘帳戶不動
+   • 動投資 → 剩餘平均分給 教育/玩樂/給予/長期儲蓄；生活與創業（FIXED）不變 */
+const ABSORB='invest';
+const SPLIT4=['edu','fun','give','saving'];
+const FIXED=['living','startup'];
+function roundToSum(keys,raw,target){
+  const f={},fr=[];let used=0;
+  keys.forEach(k=>{const x=Math.floor(raw[k]);f[k]=x;used+=x;fr.push([k,raw[k]-x]);});
+  let left=target-used;fr.sort((a,b)=>b[1]-a[1]);
+  for(let i=0;i<left&&i<fr.length;i++)f[fr[i][0]]++;
+  keys.forEach(k=>percents[k]=f[k]);
+}
+function distributeEvenly(keys,total){ total=Math.max(0,Math.round(total)); const raw={}; keys.forEach(k=>raw[k]=total/keys.length); roundToSum(keys,raw,total); }
+function setPercent(ck,v){
+  v=Math.max(0,Math.min(100,Math.round(v)));
+  if(ck===ABSORB){
+    const fixedSum=FIXED.reduce((s,k)=>s+percents[k],0);
+    const mx=100-fixedSum; v=Math.min(v,mx);
+    percents[ABSORB]=v; distributeEvenly(SPLIT4,100-v-fixedSum);
+  } else {
+    const others=KEYS.filter(k=>k!==ck&&k!==ABSORB);
+    const os=others.reduce((s,k)=>s+percents[k],0);
+    v=Math.min(v,100-os);
+    percents[ck]=v; percents[ABSORB]=100-v-os;
+  }
+}
+
+function buildRows(){
+  $('rows').innerHTML=ACCOUNTS.map((a,i)=>{
+    const num=String(i+1).padStart(2,'0');
+    const burn=a.burn?'<span class="burn-tag">花光</span>':'';
+    const goal=a.goal?`<div class="goal" id="${a.key}-goal">${a.goal.text}</div>`:'';
+    return `<div class="row" data-key="${a.key}">
+      <div class="top">
+        <span class="no">${num}</span>
+        <span class="dot" style="background:${a.hex}"></span>
+        <span class="name">${a.name}${burn}</span>
+        <span class="pct" id="${a.key}-pct-label">${a.percent}%</span>
+        <span class="amt" id="${a.key}-amount">0</span>
+      </div>
+      <div class="ctl">
+        <input type="range" class="pct-slider" id="${a.key}-slider" min="0" max="100" step="1" value="${a.percent}" aria-label="${a.name}比例" style="--slider-fill:${a.percent}%" />
+        <input type="number" class="pct-input" id="${a.key}-pct-input" min="0" max="100" value="${a.percent}" aria-label="${a.name}百分比" />
+      </div>
+      ${goal}
+    </div>`;
+  }).join('');
+}
+function buildAllocBar(){ $('alloc-bar').innerHTML=ACCOUNTS.map(a=>`<span class="alloc-seg" data-key="${a.key}" style="background:${a.hex}"></span>`).join(''); }
+
+function updateRow(a,income){
+  const pct=percents[a.key], amt=income*pct/100;
+  $(`${a.key}-pct-label`).textContent=pct+'%';
+  const amtEl=$(`${a.key}-amount`), nx=fmtNoCur(amt);
+  if(amtEl.textContent!==nx){ amtEl.textContent=nx; pop(amtEl); }
+  const pi=$(`${a.key}-pct-input`); if(document.activeElement!==pi) pi.value=pct;
+  const sl=$(`${a.key}-slider`); sl.style.setProperty('--slider-fill',pct+'%'); sl.value=pct;
+  if(a.goal){ const g=$(`${a.key}-goal`); const met=a.goal.type==='max'?pct<=a.goal.v:pct>=a.goal.v;
+    g.textContent=(met?'✓ ':'! ')+a.goal.text; g.className='goal '+(met?'ok':'miss'); }
+}
+function renderAll(){
+  const income=currentIncome(), f=fmt(income);
+  const td=$('total-display'); if(td.textContent!==f){ td.textContent=f; pop(td); }
+  const sum=KEYS.reduce((s,k)=>s+percents[k],0);
+  const b=$('total-pct-badge'); b.textContent=Math.round(sum)+'%'; b.className='pct-badge'+(sum>100.01?' over':sum<99.99?' under':'');
+  ACCOUNTS.forEach(a=>updateRow(a,income));
+  ACCOUNTS.forEach(a=>{ const s=$('alloc-bar').querySelector(`[data-key="${a.key}"]`); if(s) s.style.width=percents[a.key]+'%'; });
+}
+function bindCalc(){
+  ACCOUNTS.forEach(a=>{
+    const sl=$(`${a.key}-slider`), ni=$(`${a.key}-pct-input`);
+    sl.addEventListener('input',()=>{ setPercent(a.key,+sl.value); renderAll(); hideStampIfDirty(); });
+    const apply=()=>{ let v=parseInt(ni.value,10); if(isNaN(v)) v=percents[a.key]; setPercent(a.key,v); renderAll(); hideStampIfDirty(); };
+    ni.addEventListener('change',apply);
+    ni.addEventListener('keydown',e=>{ if(e.key==='Enter'){ apply(); ni.blur(); } });
+  });
+  incomeInput.addEventListener('input',()=>{ renderAll(); hideStampIfDirty(); });
+  incomeInput.addEventListener('keydown',e=>{ if(e.key==='Enter') incomeInput.blur(); });
+  $('btn-reset').addEventListener('click',()=>{ ACCOUNTS.forEach(a=>percents[a.key]=a.percent); incomeInput.value=''; renderAll(); hideStamp(); incomeInput.focus(); });
+  $('btn-save').addEventListener('click',saveThisMonth);
+  $('month-input').addEventListener('change',()=>{ updateReceiptNo(); hideStampIfDirty(); checkStampForMonth(); });
+}
+
+function updateReceiptNo(){
+  const m=$('month-input').value||curMonth();
+  $('receipt-no').textContent=m;
+  $('stamp-date').textContent=m.replace('-','·');
+}
+function showStamp(){ $('stamp').classList.remove('hidden'); }
+function hideStamp(){ $('stamp').classList.add('hidden'); }
+function hideStampIfDirty(){
+  const m=$('month-input').value||curMonth(); const rec=records[m];
+  if(!rec){ hideStamp(); return; }
+  if(rec.income!==currentIncome()){ hideStamp(); return; }
+  for(const k of KEYS) if(rec.percents[k]!==percents[k]){ hideStamp(); return; }
+  showStamp();
+}
+function checkStampForMonth(){
+  const m=$('month-input').value||curMonth(); const rec=records[m];
+  if(rec) hideStampIfDirty(); else hideStamp();
+}
+
+/* 記帳 */
+const LS_KEY='income-allocator:v1';
+let records={};
+function loadRecords(){ try{ records=JSON.parse(localStorage.getItem(LS_KEY))||{}; }catch{ records={}; } }
+function saveRecords(){ try{ localStorage.setItem(LS_KEY,JSON.stringify(records)); }catch(e){ showToast('儲存失敗，請確認瀏覽器允許本機儲存'); } }
+function curMonth(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function monthLabel(m){ const [y,mm]=m.split('-'); return `${y} 年 ${parseInt(mm,10)} 月`; }
+let selectedMonth=null;
+
+function saveThisMonth(){
+  const income=currentIncome();
+  if(income<=0){ showToast('請先輸入本月收入金額'); incomeInput.focus(); return; }
+  const m=$('month-input').value||curMonth();
+  if(records[m]){
+    if(!confirm(`${monthLabel(m)} 已有分配單。\n要用目前的收入與比例更新嗎？（已記錄的花費會保留）`)) return;
+    records[m].income=income; records[m].percents={...percents};
+  } else { records[m]={ income, percents:{...percents}, createdAt:Date.now(), expenses:{} }; }
+  saveRecords(); showToast(`已儲存 ${monthLabel(m)}`); showStamp();
+}
+function budgetOf(rec,k){ return Math.round(rec.income*rec.percents[k]/100); }
+function spentOf(rec,k){ return (rec.expenses[k]||[]).reduce((s,e)=>s+e.amt,0); }
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function dateStr(ts){ const d=new Date(ts); return String(d.getMonth()+1).padStart(2,'0')+'/'+String(d.getDate()).padStart(2,'0'); }
+
+function renderRecords(){
+  const view=$('view-records');
+  const months=Object.keys(records).sort().reverse();
+  if(months.length===0){
+    view.innerHTML=`<article class="receipt"><div class="empty-state">
+      <div class="es-ic"><svg class="ic"><use href="#i-list"/></svg></div>
+      <p>還沒有任何消費明細。<br>先到「分配單」輸入本月收入、調好比例，按 SAVE 即可建立。</p>
+      <button class="btn-primary" style="max-width:none;margin:auto" id="es-go">[ 前往分配單 ]</button></div></article>`;
+    $('es-go').addEventListener('click',()=>switchTab('calc')); return;
+  }
+  if(!selectedMonth||!records[selectedMonth]) selectedMonth=months[0];
+  const rec=records[selectedMonth];
+  const totalSpent=KEYS.reduce((s,k)=>s+spentOf(rec,k),0), remain=rec.income-totalSpent;
+  const opts=months.map(m=>`<option value="${m}" ${m===selectedMonth?'selected':''}>${m}</option>`).join('');
+
+  const blocks=ACCOUNTS.map((a,i)=>{
+    const budget=budgetOf(rec,a.key), spent=spentOf(rec,a.key), rem=budget-spent, over=rem<0;
+    const list=(rec.expenses[a.key]||[]);
+    const items=list.length?list.map(e=>`<li class="expense-row" data-id="${e.id}">
+      <span class="ed">${e.date||'--/--'}</span>
+      <span class="en">${escapeHtml(e.name)}</span>
+      <span class="ea">${fmtNoCur(e.amt)}</span>
+      <button class="del" data-key="${a.key}" data-id="${e.id}" aria-label="刪除">×</button></li>`).join('')
+      :`<li class="expense-empty">— 尚無花費 —</li>`;
+    const customExtras = (rec.customNotes && rec.customNotes[a.key]) || [];
+    const allNotes = (a.notes||[]).concat(customExtras);
+    const noteTags = allNotes.length
+      ? `<div class="note-tags">${allNotes.map((n,idx)=>{
+          const isCustom = idx >= (a.notes||[]).length;
+          return `<span class="note-tag${isCustom?' custom':''}" data-key="${a.key}" data-idx="${idx}">${escapeHtml(n)}${isCustom?'<button class="note-del" data-key="'+a.key+'" data-idx="'+idx+'" aria-label="刪除">×</button>':''}</span>`;
+        }).join('')}${a.custom?`<button class="note-add" data-key="${a.key}" aria-label="新增備註">+ 自訂</button>`:''}</div>`
+      : '';
+    return `<div class="ledger-block" data-key="${a.key}">
+      <div class="lb-head"><span class="name"><span class="dot" style="background:${a.hex}"></span>${String(i+1).padStart(2,'0')}　${a.name}</span><span class="dotleader"></span><span class="budget">預算 ${fmtNoCur(budget)}　${rec.percents[a.key]}%</span></div>
+      ${noteTags}
+      <ul class="expense-list">${items}</ul>
+      <div class="subtotal"><span class="lbl">小計</span><span class="val">${fmtNoCur(spent)}</span></div>
+      <div class="subtotal remain ${over?'neg':''}"><span class="lbl">${over?'超支':'剩餘'}</span><span class="val">${over?'-'+fmtNoCur(-rem):fmtNoCur(rem)}</span></div>
+      <div class="expense-form">
+        <input class="exp-name" type="text" placeholder="品項，例如：午餐" data-key="${a.key}" maxlength="30" />
+        <input class="exp-amt" type="number" placeholder="金額" min="0" step="1" inputmode="numeric" data-key="${a.key}" />
+        <button class="exp-add" data-key="${a.key}" aria-label="新增">+</button>
+      </div></div>`;
+  }).join('');
+
+  view.innerHTML=`<article class="receipt">
+    <header class="r-head">
+      <div class="r-title">消　費　明　細</div>
+      <div class="r-sub">NO. <b>${selectedMonth}</b>　·　${monthLabel(selectedMonth)}</div>
+    </header>
+    <div class="records-head">
+      <label for="month-select">MONTH</label>
+      <select id="month-select">${opts}</select>
+      <button class="btn-danger" id="btn-del-month">DELETE</button>
+    </div>
+    <div class="summary">
+      <div class="cell"><div class="lbl">INCOME</div><div class="val">${fmtNoCur(rec.income)}</div></div>
+      <div class="cell spent"><div class="lbl">SPENT</div><div class="val">${fmtNoCur(totalSpent)}</div></div>
+      <div class="cell remain ${remain<0?'neg':''}"><div class="lbl">${remain<0?'OVER':'LEFT'}</div><div class="val">${remain<0?'-'+fmtNoCur(-remain):fmtNoCur(remain)}</div></div>
+    </div>
+    ${blocks}
+    <div class="divider"></div>
+    <div class="total-line"><span class="lbl">合計</span><span class="val">${fmt(totalSpent)} / ${fmt(rec.income)}</span></div>
+    <div class="barcode"><div class="bars">|‖|‖||‖|‖‖||‖|‖||‖|‖‖|‖||‖|‖|</div><div class="cap">${selectedMonth}　THANK YOU FOR SHOPPING</div></div>
+  </article>`;
+
+  $('month-select').addEventListener('change',e=>{ selectedMonth=e.target.value; renderRecords(); });
+  $('btn-del-month').addEventListener('click',()=>{ if(confirm(`確定刪除 ${monthLabel(selectedMonth)} 的整張明細嗎？無法復原。`)){ delete records[selectedMonth]; selectedMonth=null; saveRecords(); renderRecords(); showToast('已刪除'); } });
+  bindLedger(view);
+}
+function bindLedger(view){
+  const doAdd=key=>{
+    const block=view.querySelector(`.ledger-block[data-key="${key}"]`);
+    const nameEl=block.querySelector('.exp-name'), amtEl=block.querySelector('.exp-amt');
+    const amt=Math.round(parseFloat(amtEl.value));
+    if(!(amt>0)){ showToast('請輸入大於 0 的金額'); amtEl.focus(); return; }
+    const rec=records[selectedMonth];
+    (rec.expenses[key]=rec.expenses[key]||[]).push({ id:Date.now().toString(36)+Math.random().toString(36).slice(2,6), date:dateStr(Date.now()), name:(nameEl.value||'').trim()||'未命名', amt });
+    saveRecords(); renderRecords();
+    const nc=view.querySelector(`.ledger-block[data-key="${key}"] .exp-name`); if(nc) nc.focus();
+  };
+  view.querySelectorAll('.exp-add').forEach(b=>b.addEventListener('click',()=>doAdd(b.dataset.key)));
+  view.querySelectorAll('.exp-amt,.exp-name').forEach(inp=>inp.addEventListener('keydown',e=>{ if(e.key==='Enter') doAdd(inp.dataset.key); }));
+  view.querySelectorAll('.expense-row .del').forEach(b=>b.addEventListener('click',()=>{ const {key,id}=b.dataset; const rec=records[selectedMonth]; rec.expenses[key]=(rec.expenses[key]||[]).filter(e=>String(e.id)!==String(id)); saveRecords(); renderRecords(); }));
+  // 點備註標籤 → 帶入花費表單的品項欄
+  view.querySelectorAll('.note-tag').forEach(t=>t.addEventListener('click',e=>{
+    if(e.target.classList.contains('note-del')) return;
+    const key=t.dataset.key;
+    const block=view.querySelector(`.ledger-block[data-key="${key}"]`);
+    const nameEl=block.querySelector('.exp-name');
+    // 用標籤文字(去掉 emoji 與空白)當品項
+    const raw=t.childNodes[0].textContent.trim();
+    nameEl.value=raw;
+    block.querySelector('.exp-amt').focus();
+  }));
+  // 新增自訂備註
+  view.querySelectorAll('.note-add').forEach(b=>b.addEventListener('click',()=>{
+    const key=b.dataset.key;
+    const txt=prompt('新增自訂備註（可加 emoji 開頭，例如：✈️ 京都自由行）');
+    if(!txt||!txt.trim()) return;
+    const rec=records[selectedMonth];
+    rec.customNotes=rec.customNotes||{};
+    rec.customNotes[key]=rec.customNotes[key]||[];
+    rec.customNotes[key].push(txt.trim());
+    saveRecords(); renderRecords();
+  }));
+  // 刪除自訂備註
+  view.querySelectorAll('.note-del').forEach(b=>b.addEventListener('click',e=>{
+    e.stopPropagation();
+    const {key,idx}=b.dataset;
+    const rec=records[selectedMonth];
+    const builtinLen=(ACCOUNTS.find(a=>a.key===key).notes||[]).length;
+    const customIdx=Number(idx)-builtinLen;
+    if(rec.customNotes && rec.customNotes[key] && customIdx>=0){
+      rec.customNotes[key].splice(customIdx,1);
+      saveRecords(); renderRecords();
+    }
+  }));
+}
+
+function switchTab(which){
+  const calc=which==='calc';
+  $('tab-calc').classList.toggle('active',calc); $('tab-records').classList.toggle('active',!calc);
+  $('view-calc').classList.toggle('active',calc); $('view-records').classList.toggle('active',!calc);
+  if(!calc) renderRecords();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+let toastTimer;
+function showToast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2400); }
+
+function setupPWA(){
+  if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+  const btn=$('install-btn'), tip=$('install-tip');
+  const standalone=(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||window.navigator.standalone===true;
+  if(standalone) return;
+  let deferred=null;
+  window.addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); deferred=e; btn.classList.add('show'); });
+  const isSafari=/^((?!chrome|android|crios|edg).)*safari/i.test(navigator.userAgent);
+  btn.addEventListener('click',async()=>{
+    if(deferred){ deferred.prompt(); await deferred.userChoice; deferred=null; btn.classList.remove('show'); }
+    else { tip.innerHTML=isSafari?'Safari：上方選單「<b>檔案 → 加入 Dock…</b>」（macOS 14+）即可像 App 開啟。':'在 Chrome / Edge 網址列右側點「<b>安裝</b>」圖示即可。'; tip.classList.toggle('show'); }
+  });
+  if(isSafari) btn.classList.add('show');
+}
+
+(function init(){
+  loadRecords();
+  buildRows(); buildAllocBar(); bindCalc();
+  $('month-input').value=curMonth();
+  updateReceiptNo();
+  renderAll();
+  checkStampForMonth();
+  $('tab-calc').addEventListener('click',()=>switchTab('calc'));
+  $('tab-records').addEventListener('click',()=>switchTab('records'));
+  setupPWA();
+})();
+</script>
+</body>
+</html>
