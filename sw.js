@@ -1,9 +1,9 @@
 /* 月收入分配計算機 — Service Worker
    提供離線使用：第一次載入後即可斷網開啟。
    每次發版時更動 CACHE 名稱，新版會自動安裝、頁面會自動 reload 套用。
-   v19：install 與 navigate 改用 cache:'reload' 強制繞過瀏覽器 HTTP 快取，
+   v20：install 與 navigate 改用 cache:'reload' 強制繞過瀏覽器 HTTP 快取，
         避免 GitHub Pages 的 10 分鐘快取讓新版抓不到。 */
-const CACHE = 'income-allocator-v19';
+const CACHE = 'income-allocator-v20';
 const ASSETS = [
   './',
   './index.html',

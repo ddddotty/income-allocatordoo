@@ -352,7 +352,7 @@ body{
 
   <button class="install-btn" id="install-btn">[ INSTALL APP ]</button>
   <p class="install-tip" id="install-tip"></p>
-  <footer class="foot">心理帳戶 · 資料儲存於本機 · 可離線使用 · v19</footer>
+  <footer class="foot">心理帳戶 · 資料儲存於本機 · 可離線使用 · v20</footer>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -518,7 +518,6 @@ function teethPath(w){ let d='M0 0 ',tw=10; for(let x=0;x<w;x+=tw){ d+='L'+(x+tw
 /* 列印吐紙動畫：收據自出紙口吐出、往下掉，結束時自動下載 PNG */
 function playEjectAndDownload(dataUrl,filename){
   const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if(reduce){ triggerDownload(dataUrl,filename); showToast('已匯出 PNG'); return; }
   const PW=Math.min(360,Math.round(window.innerWidth*0.84));
   const MW=PW+16;
   const ov=document.createElement('div'); ov.className='print-overlay';
@@ -540,14 +539,16 @@ function playEjectAndDownload(dataUrl,filename){
     const full=Math.min(imgH,Math.round(window.innerHeight*0.72));
     led.classList.add('busy');
     feed.style.height='0px';
-    const dur=1500; let start=null;
+    const dur=reduce?1000:1500; let start=null;
     function frame(now){
       if(!start) start=now;
       const t=Math.min(1,(now-start)/dur);
-      const grip=t<0.13?(t/0.13)*0.06:0.06+(1-Math.pow(1-(t-0.13)/0.87,3))*0.94;
+      const grip=reduce
+        ? (1-Math.pow(1-t,3))
+        : (t<0.13?(t/0.13)*0.06:0.06+(1-Math.pow(1-(t-0.13)/0.87,3))*0.94);
       feed.style.height=(full*grip)+'px';
-      const amp=1.6*(1-t)+0.3;
-      img.style.transform='translateX('+((Math.random()-0.5)*amp).toFixed(2)+'px)';
+      if(reduce){ img.style.transform='none'; }
+      else { const amp=1.6*(1-t)+0.3; img.style.transform='translateX('+((Math.random()-0.5)*amp).toFixed(2)+'px)'; }
       if(t<1){ requestAnimationFrame(frame); }
       else { feed.style.height=full+'px'; img.style.transform='translateX(0)'; finish(); }
     }
