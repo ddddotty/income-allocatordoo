@@ -1,8 +1,7 @@
 /* 月收入分配計算機 — Service Worker
    提供離線使用：第一次載入後即可斷網開啟。
-   （Service Worker 僅在 http(s) 或 localhost 下運作；
-     以 file:// 直接開啟時不註冊，但本工具無外部依賴，仍可正常使用。） */
-const CACHE = 'income-allocator-v16';
+   每次發版時更動 CACHE 名稱，新版會自動安裝、頁面會自動 reload 套用。 */
+const CACHE = 'income-allocator-v17';
 const ASSETS = [
   './',
   './index.html',
@@ -17,6 +16,7 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', e => {
+  // 安裝完直接成為 active(讓使用者無痛拿到新版)
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
 });
 
@@ -30,6 +30,20 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
+  const url = new URL(e.request.url);
+  // navigate / index.html / sw.js 採用 network-first，確保新版能被偵測
+  const isNav = e.request.mode === 'navigate' || url.pathname.endsWith('/index.html') || url.pathname.endsWith('/sw.js');
+  if (isNav) {
+    e.respondWith(
+      fetch(e.request).then(res => {
+        const copy = res.clone();
+        caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+        return res;
+      }).catch(() => caches.match(e.request).then(r => r || caches.match('./index.html')))
+    );
+    return;
+  }
+  // 其餘採用 cache-first
   e.respondWith(
     caches.match(e.request).then(hit =>
       hit || fetch(e.request).then(res => {

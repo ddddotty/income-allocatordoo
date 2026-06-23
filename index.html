@@ -243,6 +243,14 @@ body{
   background:var(--ink);color:var(--paper);font-family:var(--mono);font-size:.82rem;font-weight:700;letter-spacing:.1em;
   padding:.7rem 1.2rem;box-shadow:var(--sh);opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:50;max-width:90vw;text-align:center}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+.update-banner{position:fixed;left:50%;bottom:calc(1.4rem + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(80px);
+  background:var(--ink);color:var(--paper);box-shadow:var(--sh);
+  display:flex;align-items:center;gap:.6rem;padding:.65rem 1.15rem;border-radius:99px;
+  font-family:var(--mono);font-size:.8rem;font-weight:700;letter-spacing:.1em;z-index:60;opacity:0;transition:opacity .3s,transform .3s;max-width:90vw}
+.update-banner.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.dot-spin{width:11px;height:11px;border:2px solid var(--paper);border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite;flex:none}
+@keyframes spin{to{transform:rotate(360deg)}}
 @keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.08)}100%{transform:scale(1)}}
 .pop{animation:pop .3s ease}
 
@@ -890,7 +898,26 @@ let toastTimer;
 function showToast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2400); }
 
 function setupPWA(){
-  if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', async () => {
+      try {
+        const reg = await navigator.serviceWorker.register('sw.js');
+        // 偵測有新版安裝
+        let firstController = !!navigator.serviceWorker.controller;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          // 首次安裝(沒有舊 controller)時不 reload,只有「升級」時才 reload
+          if(!firstController) return;
+          showUpdateBanner();
+          // 短暫提示後自動 reload
+          setTimeout(() => window.location.reload(), 1400);
+        });
+        // 每次頁面取得焦點時主動檢查更新
+        const checkUpdate = () => reg.update().catch(()=>{});
+        window.addEventListener('focus', checkUpdate);
+        document.addEventListener('visibilitychange', () => { if(!document.hidden) checkUpdate(); });
+      } catch(_){}
+    });
+  }
   const btn=$('install-btn'), tip=$('install-tip');
   const standalone=(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||window.navigator.standalone===true;
   if(standalone) return;
@@ -902,6 +929,15 @@ function setupPWA(){
     else { tip.innerHTML=isSafari?'Safari：上方選單「<b>檔案 → 加入 Dock…</b>」（macOS 14+）即可像 App 開啟。':'在 Chrome / Edge 網址列右側點「<b>安裝</b>」圖示即可。'; tip.classList.toggle('show'); }
   });
   if(isSafari) btn.classList.add('show');
+}
+
+function showUpdateBanner(){
+  if(document.getElementById('update-banner')) return;
+  const b=document.createElement('div');
+  b.id='update-banner';
+  b.className='update-banner show';
+  b.innerHTML='<span class="dot-spin"></span><span>有新版本，正在套用…</span>';
+  document.body.appendChild(b);
 }
 
 (function init(){
