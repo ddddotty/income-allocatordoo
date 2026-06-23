@@ -1,7 +1,7 @@
 /* 月收入分配計算機 — Service Worker
    提供離線使用：第一次載入後即可斷網開啟。
    每次發版時更動 CACHE 名稱，新版會自動安裝、頁面會自動 reload 套用。 */
-const CACHE = 'income-allocator-v17';
+const CACHE = 'income-allocator-v18';
 const ASSETS = [
   './',
   './index.html',

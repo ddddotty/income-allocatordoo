@@ -254,6 +254,23 @@ body{
 @keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.08)}100%{transform:scale(1)}}
 .pop{animation:pop .3s ease}
 
+/* ── 匯出列印動畫浮層 ── */
+.print-overlay{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
+  padding:max(8vh,46px) 1rem 1rem;background:rgba(43,38,32,0);transition:background .3s;overscroll-behavior:contain;cursor:pointer}
+.print-overlay.show{background:rgba(43,38,32,.55)}
+.po-stage{position:relative;display:flex;flex-direction:column;align-items:center;max-width:100%}
+.po-printer{width:100%;height:36px;background:#3a352c;border-radius:6px 6px 0 0;display:flex;align-items:center;justify-content:center;position:relative;z-index:4;box-shadow:0 3px 8px rgba(0,0,0,.3)}
+.po-slit{width:60%;height:5px;background:#16130f;border-radius:3px}
+.po-led{position:absolute;left:14px;top:13px;width:9px;height:9px;border-radius:50%;background:var(--acc);box-shadow:0 0 6px var(--acc)}
+.po-led.busy{animation:blink .5s steps(1) infinite}
+.po-tag{position:absolute;right:14px;font-family:var(--mono);font-size:.5rem;letter-spacing:.18em;color:#b8b0a0}
+.po-teeth{display:block;margin-top:-1px;position:relative;z-index:4;max-width:100%}
+.po-feed{width:100%;height:0;overflow:hidden;position:relative;z-index:1;margin-top:-3px}
+.po-head{position:absolute;top:0;left:0;right:0;height:16px;z-index:3;pointer-events:none;background:linear-gradient(rgba(43,38,32,.32),rgba(43,38,32,0))}
+.po-paper{position:absolute;left:50%;bottom:0;transform:translateX(-50%)}
+.po-img{display:block;box-shadow:0 14px 30px rgba(0,0,0,.3);will-change:transform}
+@keyframes blink{50%{opacity:.25}}
+
 @media (max-width:380px){
   .receipt{padding:1.4rem 1.2rem 1.55rem}
   #income-input{font-size:1.3rem;width:104px}
@@ -496,6 +513,51 @@ function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<'
 function dateStr(ts){ const d=new Date(ts); return String(d.getMonth()+1).padStart(2,'0')+'/'+String(d.getDate()).padStart(2,'0'); }
 
 /* ── 匯出 PNG ── */
+function triggerDownload(url,filename){ const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); }
+function teethPath(w){ let d='M0 0 ',tw=10; for(let x=0;x<w;x+=tw){ d+='L'+(x+tw/2)+' 7 L'+(x+tw)+' 0 '; } return d+'L'+w+' 0 Z'; }
+/* 列印吐紙動畫：收據自出紙口吐出、往下掉，結束時自動下載 PNG */
+function playEjectAndDownload(dataUrl,filename){
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(reduce){ triggerDownload(dataUrl,filename); showToast('已匯出 PNG'); return; }
+  const PW=Math.min(360,Math.round(window.innerWidth*0.84));
+  const MW=PW+16;
+  const ov=document.createElement('div'); ov.className='print-overlay';
+  ov.innerHTML='<div class="po-stage" style="width:'+MW+'px">'
+    +'<div class="po-printer"><span class="po-led"></span><span class="po-slit"></span><span class="po-tag">THERMAL</span></div>'
+    +'<svg class="po-teeth" width="'+MW+'" height="7" viewBox="0 0 '+MW+' 7" preserveAspectRatio="none"><path fill="#3a352c" d="'+teethPath(MW)+'"/></svg>'
+    +'<div class="po-feed"><div class="po-head"></div><div class="po-paper" style="width:'+PW+'px"><img class="po-img" alt="" style="width:'+PW+'px" /></div></div>'
+    +'</div>';
+  document.body.appendChild(ov);
+  requestAnimationFrame(()=>ov.classList.add('show'));
+  const img=ov.querySelector('.po-img');
+  const feed=ov.querySelector('.po-feed');
+  const led=ov.querySelector('.po-led');
+  let done=false;
+  function close(){ ov.classList.remove('show'); setTimeout(()=>{ if(ov.parentNode) ov.remove(); },320); }
+  function finish(){ if(done) return; done=true; led.classList.remove('busy'); triggerDownload(dataUrl,filename); showToast('已匯出 PNG'); setTimeout(close,850); }
+  img.onload=function(){
+    const imgH=Math.round(PW*img.naturalHeight/img.naturalWidth);
+    const full=Math.min(imgH,Math.round(window.innerHeight*0.72));
+    led.classList.add('busy');
+    feed.style.height='0px';
+    const dur=1500; let start=null;
+    function frame(now){
+      if(!start) start=now;
+      const t=Math.min(1,(now-start)/dur);
+      const grip=t<0.13?(t/0.13)*0.06:0.06+(1-Math.pow(1-(t-0.13)/0.87,3))*0.94;
+      feed.style.height=(full*grip)+'px';
+      const amp=1.6*(1-t)+0.3;
+      img.style.transform='translateX('+((Math.random()-0.5)*amp).toFixed(2)+'px)';
+      if(t<1){ requestAnimationFrame(frame); }
+      else { feed.style.height=full+'px'; img.style.transform='translateX(0)'; finish(); }
+    }
+    requestAnimationFrame(frame);
+  };
+  img.onerror=function(){ finish(); };
+  img.src=dataUrl;
+  ov.addEventListener('click',close);
+}
+
 function exportMonthAsPNG(month){
   const btn=$('btn-export'); if(btn) btn.disabled=true;
   showToast('產生中…');
@@ -503,10 +565,7 @@ function exportMonthAsPNG(month){
   requestAnimationFrame(()=>setTimeout(()=>{
     try {
       const url = drawReceiptPNG(month);
-      const a=document.createElement('a');
-      a.href=url; a.download=`心理帳戶_消費明細_${month}.png`;
-      document.body.appendChild(a); a.click(); a.remove();
-      showToast('已匯出 PNG');
+      playEjectAndDownload(url, `心理帳戶_消費明細_${month}.png`);
     } catch(err){
       console.error(err);
       showToast('匯出失敗：'+err.message);
