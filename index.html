@@ -161,11 +161,17 @@ body{
 .view{display:none}.view.active{display:block}
 
 /* ── 記帳明細 ── */
-.records-head{display:flex;gap:.6rem;align-items:center;margin-bottom:.85rem;flex-wrap:wrap}
-.records-head label{font-family:var(--mono);font-size:.72rem;font-weight:700;color:var(--ink-soft);letter-spacing:.15em;flex:none}
-#month-select{flex:1 1 120px;min-width:0;background:var(--paper-soft);border:1px solid var(--dash);border-radius:0;color:var(--ink);
+.records-head{display:grid;grid-template-columns:auto 1fr auto;column-gap:.6rem;row-gap:.5rem;align-items:center;margin-bottom:.85rem}
+.records-head label{font-family:var(--mono);font-size:.72rem;font-weight:700;color:var(--ink-soft);letter-spacing:.15em}
+#month-select{min-width:0;width:100%;background:var(--paper-soft);border:1px solid var(--dash);border-radius:0;color:var(--ink);
   font-family:var(--mono);font-size:.88rem;font-weight:700;padding:.5rem .6rem;outline:none;color-scheme:light}
-.records-head .btn-ghost,.records-head .btn-danger{flex:none}
+.records-head .btn-ghost{grid-column:3;justify-self:stretch;justify-content:center}
+.records-head .btn-danger{grid-column:3;justify-self:stretch;text-align:center}
+@media (min-width:480px){
+  .records-head{grid-template-columns:auto 1fr auto auto}
+  .records-head .btn-ghost{grid-column:3;justify-self:auto}
+  .records-head .btn-danger{grid-column:4;justify-self:auto}
+}
 .btn-danger{font-family:var(--mono);font-size:.7rem;font-weight:800;letter-spacing:.2em;color:var(--warn);
   background:transparent;border:1px solid var(--warn);padding:.5rem .85rem;cursor:pointer;transition:var(--t);white-space:nowrap}
 .btn-danger:hover{background:#f5e8d8}
