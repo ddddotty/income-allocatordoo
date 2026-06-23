@@ -168,6 +168,11 @@ body{
 .btn-danger{font-family:var(--mono);font-size:.7rem;font-weight:800;letter-spacing:.2em;color:var(--warn);
   background:transparent;border:1px solid var(--warn);padding:.5rem .85rem;cursor:pointer;transition:var(--t);white-space:nowrap}
 .btn-danger:hover{background:#f5e8d8}
+.btn-ghost{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:.7rem;font-weight:800;letter-spacing:.2em;color:var(--ink);
+  background:var(--paper);border:1px solid var(--ink);padding:.5rem .85rem;cursor:pointer;transition:var(--t);white-space:nowrap}
+.btn-ghost:hover{background:var(--ink);color:var(--paper)}
+.btn-ghost .ic{font-size:.9rem}
+.btn-ghost:disabled{opacity:.5;cursor:wait}
 .summary{display:flex;justify-content:space-between;text-align:center;border-top:2px dashed var(--dash);border-bottom:2px dashed var(--dash);padding:.85rem 0;margin-bottom:.9rem;gap:.4rem}
 .summary .cell{flex:1;min-width:0}
 .summary .lbl{font-family:var(--mono);font-size:.65rem;color:var(--ink-soft);letter-spacing:.15em}
@@ -248,6 +253,7 @@ body{
 <svg class="icon-defs" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
   <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M5 3.5h14v17l-2.3-1.4-2.3 1.4-2.4-1.4-2.4 1.4-2.3-1.4L5 20.5z"/><line x1="8.5" y1="8" x2="15.5" y2="8"/><line x1="8.5" y1="11.5" x2="15.5" y2="11.5"/><line x1="8.5" y1="15" x2="13" y2="15"/></symbol>
   <symbol id="i-list" viewBox="0 0 24 24"><line x1="4" y1="6.5" x2="20" y2="6.5"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17.5" x2="20" y2="17.5"/></symbol>
+  <symbol id="i-export" viewBox="0 0 24 24"><path d="M12 3v12"/><polyline points="7.5 8 12 3 16.5 8"/><path d="M5 14v5h14v-5"/></symbol>
 </svg>
 
 <div class="wrap">
@@ -474,6 +480,276 @@ function spentOf(rec,k){ return (rec.expenses[k]||[]).reduce((s,e)=>s+e.amt,0); 
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function dateStr(ts){ const d=new Date(ts); return String(d.getMonth()+1).padStart(2,'0')+'/'+String(d.getDate()).padStart(2,'0'); }
 
+/* ── 匯出 PNG ── */
+function exportMonthAsPNG(month){
+  const btn=$('btn-export'); if(btn) btn.disabled=true;
+  showToast('產生中…');
+  // 用 requestAnimationFrame 確保 UI 更新後再開始重繪(避免 UI 卡住)
+  requestAnimationFrame(()=>setTimeout(()=>{
+    try {
+      const url = drawReceiptPNG(month);
+      const a=document.createElement('a');
+      a.href=url; a.download=`心理帳戶_消費明細_${month}.png`;
+      document.body.appendChild(a); a.click(); a.remove();
+      showToast('已匯出 PNG');
+    } catch(err){
+      console.error(err);
+      showToast('匯出失敗：'+err.message);
+    } finally {
+      if(btn) btn.disabled=false;
+    }
+  },50));
+}
+
+function drawReceiptPNG(month){
+  const rec=records[month];
+  if(!rec) throw new Error('找不到該月份資料');
+
+  // 色票(對齊 App)
+  const C={ desk:'#e7e1d6', paper:'#fbf8f1', ink:'#2b2620', soft:'#7c7361', faint:'#a89e89',
+            dash:'#cfc6b2', acc:'#2f6a4f', warn:'#a8651e', bad:'#e0492f' };
+  const F=`-apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif`;
+  const M=`"SFMono-Regular", Menlo, Consolas, "Courier New", monospace`;
+
+  // 解析度:2× retina,寬 720
+  const W=720, scale=2;
+  const PAD=44, INNER=40;
+  const totalSpent=KEYS.reduce((s,k)=>s+spentOf(rec,k),0);
+  const remain=rec.income-totalSpent;
+
+  // 第一階段:量測高度
+  // 為簡化,先用一個 dummy canvas 量測
+  const measureC=document.createElement('canvas');
+  const m=measureC.getContext('2d');
+  m.font=`14px ${F}`;
+  // 預估高度
+  let H=30 /*上鋸齒留白*/ + 30 /*抬頭 padding*/ + 38 /*抬頭*/ + 24 /*副標*/ + 36 /*虛線*/
+       + 64 /*收入大字*/ + 36 /*虛線*/ + 60 /*摘要*/ + 30 /*虛線*/;
+  for(const a of ACCOUNTS){
+    const items=rec.expenses[a.key]||[];
+    H += 22 /*區塊頂 padding*/ + 22 /*標題*/ + 16 /*間*/;
+    if(items.length){
+      H += items.length*26 + 8;
+    } else {
+      H += 30;
+    }
+    H += 16 /*分隔*/ + 22 /*小計*/ + 22 /*剩餘*/ + 22 /*區塊底虛線*/;
+  }
+  H += 32 + 30 /*合計*/ + 60 /*條碼*/ + 28 /*條碼字*/ + 40 /*下鋸齒留白*/;
+
+  // 建立 canvas
+  const c=document.createElement('canvas');
+  c.width=W*scale; c.height=H*scale;
+  const ctx=c.getContext('2d');
+  ctx.scale(scale,scale);
+  ctx.textBaseline='alphabetic';
+  // 桌面背景
+  ctx.fillStyle=C.desk; ctx.fillRect(0,0,W,H);
+
+  // 收據紙
+  const pX=PAD, pY=20, pW=W-PAD*2, pH=H-40;
+  // 陰影
+  ctx.save();
+  ctx.shadowColor='rgba(0,0,0,0.18)'; ctx.shadowBlur=18; ctx.shadowOffsetY=8;
+  ctx.fillStyle=C.paper; ctx.fillRect(pX,pY,pW,pH);
+  ctx.restore();
+  // 鋸齒(上下)
+  const tw=12, th=7;
+  ctx.fillStyle=C.desk;
+  ctx.beginPath();
+  for(let x=pX;x<pX+pW;x+=tw){
+    ctx.moveTo(x,pY); ctx.lineTo(x+tw/2,pY+th); ctx.lineTo(x+tw,pY);
+  }
+  ctx.fill();
+  ctx.beginPath();
+  for(let x=pX;x<pX+pW;x+=tw){
+    ctx.moveTo(x,pY+pH); ctx.lineTo(x+tw/2,pY+pH-th); ctx.lineTo(x+tw,pY+pH);
+  }
+  ctx.fill();
+
+  const xL=pX+INNER, xR=pX+pW-INNER, cx=pX+pW/2;
+  let y=pY+50;
+
+  // 抬頭
+  ctx.fillStyle=C.ink;
+  ctx.font=`800 26px ${F}`;
+  ctx.textAlign='center';
+  // letter-spacing 用手動繪
+  drawSpacedText(ctx,'心 理 帳 戶 計 算 機',cx,y,6);
+  y+=22;
+  ctx.fillStyle=C.faint;
+  ctx.font=`13px ${M}`;
+  drawSpacedText(ctx,`NO. ${month}　·　消費明細`,cx,y,2);
+  y+=18;
+  drawDashedLine(ctx,xL,y,xR,y,C.dash,2,6,6);
+  y+=30;
+
+  // 收入大字
+  ctx.fillStyle=C.soft;
+  ctx.font=`700 15px ${F}`;
+  ctx.textAlign='left';
+  ctx.fillText('每月收入',xL,y+8);
+  ctx.fillStyle=C.ink;
+  ctx.font=`800 34px ${M}`;
+  ctx.textAlign='right';
+  ctx.fillText(`NT$ ${rec.income.toLocaleString('zh-TW')}`,xR,y+14);
+  y+=50;
+  drawDashedLine(ctx,xL,y,xR,y,C.dash,2,6,6);
+  y+=22;
+
+  // 摘要三欄
+  const colW=(xR-xL)/3;
+  ctx.font=`11px ${M}`;
+  ctx.textAlign='center';
+  function sumCell(idx,label,val,color){
+    const x=xL+colW*idx+colW/2;
+    ctx.fillStyle=C.soft;
+    ctx.font=`11px ${M}`;
+    drawSpacedText(ctx,label,x,y,3);
+    ctx.fillStyle=color;
+    ctx.font=`800 20px ${M}`;
+    ctx.fillText(val,x,y+24);
+  }
+  sumCell(0,'INCOME', rec.income.toLocaleString('zh-TW'), C.ink);
+  sumCell(1,'SPENT', totalSpent.toLocaleString('zh-TW'), C.warn);
+  sumCell(2, remain>=0?'LEFT':'OVER',
+    (remain>=0?'':'-')+Math.abs(remain).toLocaleString('zh-TW'),
+    remain>=0?C.acc:C.bad);
+  y+=44;
+  drawDashedLine(ctx,xL,y,xR,y,C.dash,2,6,6);
+  y+=18;
+
+  // 各帳戶區塊
+  ACCOUNTS.forEach((a,i)=>{
+    const items=rec.expenses[a.key]||[];
+    const budget=budgetOf(rec,a.key);
+    const spent=spentOf(rec,a.key);
+    const rmn=budget-spent;
+    const over=rmn<0;
+    y+=20;
+    // 標題:NN 名稱 + 預算
+    ctx.fillStyle=C.ink;
+    ctx.font=`800 15px ${F}`;
+    ctx.textAlign='left';
+    ctx.fillText(`${String(i+1).padStart(2,'0')}　${a.name}`,xL,y);
+    ctx.fillStyle=C.soft;
+    ctx.font=`700 13px ${M}`;
+    ctx.textAlign='right';
+    ctx.fillText(`預算 ${budget.toLocaleString('zh-TW')}　${rec.percents[a.key]}%`,xR,y);
+    y+=16;
+    // 花費明細
+    if(items.length){
+      ctx.font=`13px ${M}`;
+      ctx.textAlign='left';
+      items.forEach(e=>{
+        ctx.fillStyle=C.faint;
+        ctx.fillText(e.date||'--/--', xL, y+16);
+        ctx.fillStyle=C.ink;
+        ctx.font=`14px ${F}`;
+        // 截斷過長品項
+        const maxNameW = xR-xL-58-80;
+        let name=e.name||'未命名';
+        let w=ctx.measureText(name).width;
+        if(w>maxNameW){
+          while(name.length>1 && ctx.measureText(name+'…').width>maxNameW){ name=name.slice(0,-1); }
+          name+='…';
+        }
+        ctx.fillText(name, xL+58, y+16);
+        ctx.font=`700 14px ${M}`;
+        ctx.textAlign='right';
+        ctx.fillText(e.amt.toLocaleString('zh-TW'), xR, y+16);
+        ctx.textAlign='left';
+        ctx.font=`13px ${M}`;
+        y+=22;
+      });
+      y+=4;
+    } else {
+      ctx.fillStyle=C.faint;
+      ctx.font=`12px ${M}`;
+      ctx.textAlign='center';
+      drawSpacedText(ctx,'— 尚無花費 —',cx,y+18,3);
+      y+=26;
+    }
+    // 小計列
+    drawDashedLine(ctx, xL+colW, y+6, xR, y+6, C.faint, 1, 3, 3);
+    y+=22;
+    ctx.fillStyle=C.soft;
+    ctx.font=`12px ${M}`;
+    ctx.textAlign='right';
+    drawSpacedText(ctx,'小計',xR-110,y,2);
+    ctx.fillStyle=C.ink;
+    ctx.font=`800 13px ${M}`;
+    ctx.fillText(spent.toLocaleString('zh-TW'), xR, y);
+    y+=18;
+    ctx.fillStyle=C.soft;
+    ctx.font=`12px ${M}`;
+    drawSpacedText(ctx, over?'超支':'剩餘', xR-110, y, 2);
+    ctx.fillStyle=over?C.bad:C.acc;
+    ctx.font=`800 13px ${M}`;
+    const rmnTxt = over?`-${Math.abs(rmn).toLocaleString('zh-TW')}`:rmn.toLocaleString('zh-TW');
+    ctx.fillText(rmnTxt, xR, y);
+    y+=18;
+    // 區塊間虛線
+    if(i<ACCOUNTS.length-1) drawDashedLine(ctx,xL,y+6,xR,y+6,C.dash,2,6,6);
+    y+=16;
+  });
+
+  // 合計
+  y+=16;
+  ctx.fillStyle=C.ink;
+  ctx.font=`800 18px ${F}`;
+  ctx.textAlign='left';
+  drawSpacedText(ctx,'合 計', xL, y, 4);
+  ctx.textAlign='right';
+  ctx.font=`800 17px ${M}`;
+  ctx.fillText(`NT$ ${totalSpent.toLocaleString('zh-TW')} / NT$ ${rec.income.toLocaleString('zh-TW')}`, xR, y);
+  y+=30;
+  // 條碼
+  ctx.fillStyle=C.ink;
+  ctx.font=`28px ${M}`;
+  ctx.textAlign='center';
+  ctx.fillText('|‖|‖||‖|‖‖||‖|‖||‖|‖‖|‖||‖|‖|', cx, y+28);
+  y+=44;
+  ctx.fillStyle=C.faint;
+  ctx.font=`11px ${M}`;
+  drawSpacedText(ctx, `${month}　THANK YOU FOR SHOPPING`, cx, y, 4);
+
+  // 輸出
+  return c.toDataURL('image/png');
+}
+
+function drawSpacedText(ctx,text,x,y,letterSpacing){
+  // 手動實作 letter-spacing(瀏覽器 Canvas 沒原生支援)
+  if(!letterSpacing){ ctx.fillText(text,x,y); return; }
+  const align=ctx.textAlign;
+  // 量總寬,以便對齊
+  let totalW=0;
+  const chars=[...text];
+  const widths=chars.map(ch=>ctx.measureText(ch).width);
+  totalW = widths.reduce((s,w)=>s+w,0) + letterSpacing*(chars.length-1);
+  let curX;
+  if(align==='center') curX=x-totalW/2;
+  else if(align==='right') curX=x-totalW;
+  else curX=x;
+  const saveAlign=ctx.textAlign;
+  ctx.textAlign='left';
+  for(let i=0;i<chars.length;i++){
+    ctx.fillText(chars[i], curX, y);
+    curX += widths[i] + letterSpacing;
+  }
+  ctx.textAlign=saveAlign;
+}
+
+function drawDashedLine(ctx,x1,y1,x2,y2,color,width,dash,gap){
+  ctx.save();
+  ctx.strokeStyle=color;
+  ctx.lineWidth=width;
+  ctx.setLineDash([dash,gap]);
+  ctx.beginPath();
+  ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  ctx.restore();
+}
+
 function renderRecords(){
   const view=$('view-records');
   const months=Object.keys(records).sort().reverse();
@@ -527,6 +803,7 @@ function renderRecords(){
     <div class="records-head">
       <label for="month-select">MONTH</label>
       <select id="month-select">${opts}</select>
+      <button class="btn-ghost" id="btn-export"><svg class="ic"><use href="#i-export"/></svg> EXPORT</button>
       <button class="btn-danger" id="btn-del-month">DELETE</button>
     </div>
     <div class="summary">
@@ -542,6 +819,7 @@ function renderRecords(){
 
   $('month-select').addEventListener('change',e=>{ selectedMonth=e.target.value; renderRecords(); });
   $('btn-del-month').addEventListener('click',()=>{ if(confirm(`確定刪除 ${monthLabel(selectedMonth)} 的整張明細嗎？無法復原。`)){ delete records[selectedMonth]; selectedMonth=null; saveRecords(); renderRecords(); showToast('已刪除'); } });
+  $('btn-export').addEventListener('click',()=>exportMonthAsPNG(selectedMonth));
   bindLedger(view);
 }
 function bindLedger(view){

@@ -2,7 +2,7 @@
    提供離線使用：第一次載入後即可斷網開啟。
    （Service Worker 僅在 http(s) 或 localhost 下運作；
      以 file:// 直接開啟時不註冊，但本工具無外部依賴，仍可正常使用。） */
-const CACHE = 'income-allocator-v13';
+const CACHE = 'income-allocator-v14';
 const ASSETS = [
   './',
   './index.html',
