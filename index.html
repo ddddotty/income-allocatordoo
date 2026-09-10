@@ -598,20 +598,23 @@ function drawReceiptCanvas(month){
   const measureC=document.createElement('canvas');
   const m=measureC.getContext('2d');
   m.font=`14px ${F}`;
-  // 預估高度
-  let H=30 /*上鋸齒留白*/ + 30 /*抬頭 padding*/ + 38 /*抬頭*/ + 24 /*副標*/ + 36 /*虛線*/
-       + 64 /*收入大字*/ + 36 /*虛線*/ + 60 /*摘要*/ + 30 /*虛線*/;
+  // 精準預估高度（與下方實際繪製流程一一對應）
+  let H = 20 + 50   /* 紙張起點 + 抬頭基線 */
+        + 22        /* 抬頭 */
+        + 18        /* 副標 */
+        + 30        /* 虛線 */
+        + 50        /* 收入大字 */
+        + 22        /* 虛線 */
+        + 44        /* 摘要 */
+        + 18;       /* 虛線 */
   for(const a of ACCOUNTS){
     const items=rec.expenses[a.key]||[];
-    H += 22 /*區塊頂 padding*/ + 22 /*標題*/ + 16 /*間*/;
-    if(items.length){
-      H += items.length*26 + 8;
-    } else {
-      H += 30;
-    }
-    H += 16 /*分隔*/ + 22 /*小計*/ + 22 /*剩餘*/ + 22 /*區塊底虛線*/;
+    H += 20 + 16;                                  /* 區塊標題 */
+    H += items.length ? (items.length*30 + 4) : 26; /* 明細 */
+    H += 22 + 18 + 18 + 16;                        /* 小計 / 剩餘 / 區塊底 */
   }
-  H += 32 + 30 /*合計*/ + 60 /*條碼*/ + 28 /*條碼字*/ + 40 /*下鋸齒留白*/;
+  H += 16 + 30 + 44;   /* 合計 + 條碼 + 條碼字 */
+  H += 30;             /* 底部留白 */
 
   // 建立 canvas
   const c=document.createElement('canvas');
@@ -723,20 +726,41 @@ function drawReceiptCanvas(month){
         ctx.fillStyle=C.ink;
         ctx.font=`14px ${F}`;
         // 截斷過長品項
-        const maxNameW = xR-xL-58-80;
+        const maxNameW = xR-xL-58-96;
         let name=e.name||'未命名';
         let w=ctx.measureText(name).width;
         if(w>maxNameW){
           while(name.length>1 && ctx.measureText(name+'…').width>maxNameW){ name=name.slice(0,-1); }
           name+='…';
         }
-        ctx.fillText(name, xL+58, y+16);
+        const nameX = xL+58;
+        ctx.fillText(name, nameX, y+16);
+        const nameEndX = nameX + ctx.measureText(name).width;
+        // 金額字寬,用來決定導引線終點
         ctx.font=`700 14px ${M}`;
+        const amtStr = e.amt.toLocaleString('zh-TW');
+        const amtW = ctx.measureText(amtStr).width;
+        // 導引點線:把品項與金額連起來,方便對齊
+        const guideStart = nameEndX + 8;
+        const guideEnd = xR - amtW - 8;
+        if(guideEnd > guideStart + 12){
+          ctx.save();
+          ctx.strokeStyle=C.faint;
+          ctx.globalAlpha=.55;
+          ctx.lineWidth=1;
+          ctx.setLineDash([1.5,3.5]);
+          ctx.beginPath();
+          ctx.moveTo(guideStart, y+12);
+          ctx.lineTo(guideEnd, y+12);
+          ctx.stroke();
+          ctx.restore();
+        }
+        ctx.fillStyle=C.ink;
         ctx.textAlign='right';
-        ctx.fillText(e.amt.toLocaleString('zh-TW'), xR, y+16);
+        ctx.fillText(amtStr, xR, y+16);
         ctx.textAlign='left';
         ctx.font=`13px ${M}`;
-        y+=22;
+        y+=30;
       });
       y+=4;
     } else {
